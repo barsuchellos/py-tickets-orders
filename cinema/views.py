@@ -1,10 +1,15 @@
 from django.db.models import Prefetch
-from django.db.models.aggregates import Count
-from django.db.models.expressions import F
 from rest_framework import viewsets
 
-from cinema.models import (Genre, Actor, CinemaHall, Movie, MovieSession, Order, Ticket)
-from cinema.pagination import LargeResultsSetPagination
+from cinema.models import (
+    Genre,
+    Actor,
+    CinemaHall,
+    Movie,
+    MovieSession,
+    Order,
+    Ticket,
+)
 from cinema.serializers import (
     GenreSerializer,
     ActorSerializer,
@@ -14,7 +19,9 @@ from cinema.serializers import (
     MovieSessionListSerializer,
     MovieDetailSerializer,
     MovieSessionDetailSerializer,
-    MovieListSerializer, OrderSerializer, OrderCreateSerializer,
+    MovieListSerializer,
+    OrderSerializer,
+    OrderCreateSerializer,
 )
 
 
@@ -40,10 +47,8 @@ class MovieViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == "list":
             return MovieListSerializer
-
         if self.action == "retrieve":
             return MovieDetailSerializer
-
         return MovieSerializer
 
     def get_queryset(self):
@@ -71,10 +76,8 @@ class MovieSessionViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == "list":
             return MovieSessionListSerializer
-
         if self.action == "retrieve":
             return MovieSessionDetailSerializer
-
         return MovieSessionSerializer
 
     def get_queryset(self):
@@ -84,40 +87,34 @@ class MovieSessionViewSet(viewsets.ModelViewSet):
             date = self.request.query_params.get("date")
             movie = self.request.query_params.get("movie")
 
-            if self.action == "list":
-                queryset = (
-                    queryset
-                    .annotate(
-                        tickets_available=F("cinema_hall__rows") * F("cinema_hall__seats_in_row") - Count("tickets"))
-                ).order_by("id")
-
             if movie:
                 arr_int_id = [int(el) for el in movie.split(",")]
                 queryset = queryset.filter(movie__id__in=arr_int_id)
 
             if date:
                 queryset = queryset.filter(show_time__date=date)
+
             return queryset.select_related("movie", "cinema_hall")
+
         return queryset
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all()
     serializer_class = OrderSerializer
-    pagination_class = LargeResultsSetPagination
 
     def get_queryset(self):
-        queryset = Order.objects.prefetch_related(
+        return Order.objects.prefetch_related(
             Prefetch(
                 "tickets",
-                queryset=Ticket.objects.select_related("movie_session__movie", "movie_session__cinema_hall")
+                queryset=Ticket.objects.select_related(
+                    "movie_session__movie",
+                    "movie_session__cinema_hall",
+                ),
             )
         ).filter(user=self.request.user)
 
-        return queryset
-
     def perform_create(self, serializer):
-        return serializer.save(user=self.request.user)
+        serializer.save(user=self.request.user)
 
     def get_serializer_class(self):
         if self.action == "create":
